@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"time"
 )
 
 type QuizBuilder interface {
@@ -18,6 +19,7 @@ type QuizBuilder interface {
 	SetFileName() QuizBuilder
 	GetPassingScore() QuizProduct
 	SetPassingScore() QuizBuilder
+	SetPass(bool) QuizProduct
 	GetQuiz() QuizProduct
 }
 
@@ -72,6 +74,11 @@ func (a *ArithmeticBuilder) GetQuiz() QuizProduct {
 	return a.q
 }
 
+func (a *ArithmeticBuilder) SetPass(pass bool) QuizProduct {
+	a.q.Pass = pass
+	return a.q
+}
+
 // PrepareQuiz opens and parses the quiz file.
 func (a *ArithmeticBuilder) PrepareQuiz() QuizBuilder {
 	//var records []string
@@ -114,12 +121,29 @@ func (a *ArithmeticBuilder) PrepareQuiz() QuizBuilder {
 func (a *ArithmeticBuilder) AskQuestions() QuizBuilder {
 	fmt.Println("-----------BEGIN--------------")
 	//var correct float64
+	timer := time.NewTimer(30 * time.Second)
+
+	// TODO: Refactor this to be easier for testing bpike_20201215
+	// label
+problemloop:
 	for k, v := range a.q.Problems {
 		fmt.Printf("%s=", k)
-		var answer string
-		fmt.Scanln(&answer)
-		if v == answer {
-			a.q.CorrectAnswerTotal++
+		// channel
+		answerCh := make(chan string)
+		go func() {
+			var answer string
+			fmt.Scanln(&answer)
+			answerCh <- answer
+		}()
+		select {
+		case <-timer.C:
+			a.q.TotalQuestions = float64(len(a.q.Problems))
+			return a
+			break problemloop
+		case answer := <-answerCh:
+			if v == answer {
+				a.q.CorrectAnswerTotal++
+			}
 		}
 	}
 	//a.q.CorrectAnswerTotal = correct
@@ -140,7 +164,7 @@ func (a *ArithmeticBuilder) Grade() QuizBuilder {
 }
 
 func (a *ArithmeticBuilder) GiveResults() QuizBuilder {
-	fmt.Println("------------END---------------")
+	fmt.Println("\n------------END---------------")
 	fmt.Printf("Total Questions: %d\n", int(a.q.TotalQuestions))
 	fmt.Printf("Correct Answers: %d\n", int(a.q.CorrectAnswerTotal))
 	fmt.Printf("Passing Score: %d %%\n", a.q.PassingScore)
